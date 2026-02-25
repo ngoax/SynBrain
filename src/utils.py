@@ -1,6 +1,10 @@
 import yaml
 import os
+import sys
 import torch
+
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SRC_DIR)
 import random
 import numpy as np
 from io import BytesIO
@@ -217,9 +221,9 @@ def load_brain_vae(args):
     
     return model
 
-def mindeye_normalize(fmri, subj):
+def mindeye_normalize(fmri, subj, norm_path):
     # 加载保存好的标准化参数
-    norm_params = np.load(f'/home/bingxing2/ailab/maiweijian/NeuroFlow/FM/mindeye2/norm_mean_scale_sub{subj}.npz')
+    norm_params = np.load(os.path.join(norm_path, f"norm_mean_scale_sub{subj}.npz"))
 
     norm_mean_train = norm_params['mean']
     norm_scale_train = norm_params['scale']
@@ -232,33 +236,6 @@ def mindeye_normalize(fmri, subj):
     fmri = (fmri - norm_mean_train) / norm_scale_train
     
     return fmri
-
-def load_brain_vae(args):
-    from script.vae.brainvae import BrainVAE_joint
-    
-    config = load_config("/home/bingxing2/ailab/maiweijian/NeuroFlow/configs/autoencoder_kl_64x64x256.yaml")
-    model_config = config["model"]["params"]
-    ddconfig = model_config["ddconfig"]
-    
-    model = BrainVAE_joint(ddconfig=ddconfig,
-                        clip_weight=1000,
-                        kl_weight=0.001
-                        )
-    
-    vae_path = f'/home/bingxing2/ailab/group/ai4neuro/BrainVL/BrainSyn/train_logs/{args.vae_path}/last.pth'
-    checkpoint = torch.load(vae_path, map_location='cpu')
-    # voxel2clip.load_state_dict(checkpoint['model_state_dict'])
-    model_state_dict = {
-        k.replace('module.', ''): v 
-        for k, v in checkpoint['model'].items() 
-        if 'module' in k
-    }
-    model.load_state_dict(model_state_dict)
-    checkpoint_epoch = checkpoint['epoch']
-    print(f'Load BrainVAE Checkpoint from {checkpoint_epoch} epoch.....')
-    del checkpoint
-    
-    return model
 
 def requires_grad(model, flag=True):
     """
@@ -389,7 +366,7 @@ def load_mindeye2(args):
     count_params(model.diffusion_prior)
     # count_params(model)
 
-    ckpt_path = f"/home/bingxing2/ailab/group/ai4neuro/mindeyev2/train_logs/{args.mindeye_ckpt}/last.pth"
+    ckpt_path = os.path.join(getattr(args, 'mindeye_ckpt_full', os.path.join(args.ckpt_path, args.mindeye_ckpt)), "last.pth")
     print(f"Loading {ckpt_path}......")
     
     checkpoint = torch.load(ckpt_path, map_location='cpu')
@@ -427,13 +404,14 @@ def mindeyev2_generate(model, x, args, return_all=False):
 
 
 
-def load_pretrained_sdxl_unclip():
+def load_pretrained_sdxl_unclip(ckpt_path=None):
     # from sdxl.models import *
     from omegaconf import OmegaConf
     from sdxl.generative_models.sgm.models.diffusion import DiffusionEngine
 
     # prep unCLIP
-    config = OmegaConf.load("/home/bingxing2/ailab/maiweijian/NeuroFlow/sdxl/generative_models/configs/unclip6.yaml")
+    config_path = os.path.join(SRC_DIR, "sdxl", "generative_models", "configs", "unclip6.yaml")
+    config = OmegaConf.load(config_path)
     config = OmegaConf.to_container(config, resolve=True)
     unclip_params = config["model"]["params"]
     network_config = unclip_params["network_config"]
@@ -459,7 +437,8 @@ def load_pretrained_sdxl_unclip():
     diffusion_engine.eval().requires_grad_(False)
     diffusion_engine.to(device)
 
-    ckpt_path = f'/home/bingxing2/ailab/group/ai4neuro/mindeyev2/unclip6_epoch0_step110000.ckpt'
+    if ckpt_path is None:
+        ckpt_path = os.path.join(ROOT_DIR, "checkpoints", "unclip6_epoch0_step110000.ckpt")
     ckpt = torch.load(ckpt_path, map_location='cpu')
     diffusion_engine.load_state_dict(ckpt['state_dict'])
 
@@ -516,8 +495,10 @@ def unclip_recon(x, diffusion_engine, vector_suffix,
         # samples = torch.clamp((samples_x + .5) / 2.0, min=0.0, max=1.0)
         return samples
     
-def denorm_z_score(z_norm, sub):
-    stats = np.load(f'/home/bingxing2/ailab/maiweijian/NeuroFlow/FM/mindeye2/clip_stats_sub{sub}.npz')
+def denorm_z_score(z_norm, sub, stats_path=None):
+    if stats_path is None:
+        stats_path = os.path.join(ROOT_DIR, "data", "clip_stats")
+    stats = np.load(os.path.join(stats_path, f'clip_stats_sub{sub}.npz'))
     mu = stats['mu']
     std = stats['std']
     mu = torch.from_numpy(mu).float().to(z_norm.device)
@@ -529,10 +510,11 @@ def denorm_z_score(z_norm, sub):
 
 def sdxl_recon_combined_all(diffusion_engine, vector_suffix, sample_clip, train_clip, sample_f2i, args, num_samples=5):
     
+    stats_path = getattr(args, 'stats_path', None)
     if args.zscore_clip:
-        sample_clip = denorm_z_score(sample_clip.detach().to(device), args.valid_sub)
-        sample_f2i = denorm_z_score(sample_f2i.detach().to(device), args.valid_sub)
-        train_clip = denorm_z_score(train_clip.detach().to(device), args.valid_sub)
+        sample_clip = denorm_z_score(sample_clip.detach().to(device), args.valid_sub, stats_path)
+        sample_f2i = denorm_z_score(sample_f2i.detach().to(device), args.valid_sub, stats_path)
+        train_clip = denorm_z_score(train_clip.detach().to(device), args.valid_sub, stats_path)
     else:
         sample_clip = sample_clip.detach().to(device)
         sample_f2i = sample_f2i.detach().to(device)

@@ -2,11 +2,14 @@ from sklearn.decomposition import PCA
 # from umap._umap import UMAP
 import os
 import sys
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/vae")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/s2n")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/sdxl/")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/sdxl/generative_models")
+SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = os.path.dirname(SRC_DIR)
+
+sys.path.append(SRC_DIR)
+sys.path.append(os.path.join(SRC_DIR, "vae"))
+sys.path.append(os.path.join(SRC_DIR, "s2n"))
+sys.path.append(os.path.join(SRC_DIR, "sdxl"))
+sys.path.append(os.path.join(SRC_DIR, "sdxl", "generative_models"))
 import argparse
 import copy
 from copy import deepcopy
@@ -125,7 +128,7 @@ def requires_grad(model, flag=True):
 def load_brain_vae(args):
     from brainvae import BrainVAE
     
-    config = load_config("/home/bingxing2/ailab/maiweijian/SynBrain/configs/brainvae.yaml")
+    config = load_config(os.path.join(ROOT_DIR, "configs", "brainvae.yaml"))
     model_config = config["model"]["params"]
     ddconfig = model_config["ddconfig"]
     
@@ -136,7 +139,7 @@ def load_brain_vae(args):
                         kl_weight=0.001
                         )
     
-    model_path = f'/home/bingxing2/ailab/group/ai4neuro/BrainVL/BrainSyn/train_logs/{args.brain_path}/last.pth'
+    model_path = os.path.join(args.ckpt_path, args.brain_path, "last.pth")
     checkpoint = torch.load(model_path, map_location='cpu')
     # voxel2clip.load_state_dict(checkpoint['model_state_dict'])
     model_state_dict = {
@@ -151,9 +154,10 @@ def load_brain_vae(args):
     
     return model
     
-def mindeye_normalize(fmri, subj):
+def mindeye_normalize(fmri, subj, norm_path):
     # 加载保存好的标准化参数
-    norm_params = np.load(f'/home/bingxing2/ailab/maiweijian/NeuroFlow/FM/mindeye2/norm_mean_scale_sub{subj}.npz')
+    norm_params = np.load(os.path.join(norm_path, f"norm_mean_scale_sub{subj}.npz"))
+
 
     norm_mean_train = norm_params['mean']
     norm_scale_train = norm_params['scale']
@@ -207,6 +211,7 @@ def main(args):
     
     #! Load MindEye2 for reconstructed fMRI decoding
     args.mindeye_ckpt = f"final_subj0{args.valid_sub}_pretrained_40sess_24bs"
+    args.mindeye_ckpt_full = os.path.join(args.mindeye_ckpt_path, args.mindeye_ckpt)
     voxel_dict = {1:15724, 2:14278, 5:13039, 7:12682}
     args.num_voxels = voxel_dict[args.valid_sub]
     mindeyev2 = load_mindeye2(args)
@@ -215,7 +220,7 @@ def main(args):
     count_params(mindeyev2)
     
     # #! Load SDXL UnClip decoder using CPU, parameter: 4.5B
-    diffusion_engine, vector_suffix = load_pretrained_sdxl_unclip()
+    diffusion_engine, vector_suffix = load_pretrained_sdxl_unclip(args.unclip_ckpt)
     requires_grad(diffusion_engine, False)
     print("params of sdxl:")
     count_params(diffusion_engine)
@@ -322,7 +327,7 @@ def main(args):
             all_mse_disc.append(mse_disc.item())
             
             #! mindeye generation
-            recon_fmri_norm = mindeye_normalize(recon_fmri, args.valid_sub)
+            recon_fmri_norm = mindeye_normalize(recon_fmri, args.valid_sub, args.norm_path)
             print(torch.mean(recon_fmri_norm), torch.std(recon_fmri_norm))
             sample_fmri2img = mindeyev2_generate(mindeyev2, recon_fmri_norm, args)
                 
@@ -369,8 +374,14 @@ def main(args):
 def parse_args(input_args=None):
     parser = argparse.ArgumentParser(description="Evaluation")
 
-    parser.add_argument("--ckpt-path", type=str, default="/home/bingxing2/ailab/group/ai4neuro/BrainVL/BrainSyn/train_logs")
-    parser.add_argument("--save-path", type=str, default="/home/bingxing2/ailab/group/ai4neuro/BrainVL/BrainSyn")
+    parser.add_argument("--ckpt-path", type=str, default=os.path.join(ROOT_DIR, "checkpoint"))
+    parser.add_argument("--mindeye-ckpt-path", type=str, default=os.path.join(ROOT_DIR, "train_logs"))
+    parser.add_argument("--save-path", type=str, default=ROOT_DIR)
+    parser.add_argument("--data-path", type=str, default=os.path.join(ROOT_DIR, "data"))
+    parser.add_argument("--norm-path", type=str, default=os.path.join(ROOT_DIR, "data"))
+    parser.add_argument("--unclip-ckpt", type=str, default=os.path.join(ROOT_DIR, "checkpoints", "unclip6_epoch0_step110000.ckpt"))
+    parser.add_argument("--stats-path", type=str, default=os.path.join(ROOT_DIR, "data", "clip_stats"))
+
     parser.add_argument("--encoder", type=str, default="vae", choices=["mlp", "conv", "vae"])
     parser.add_argument("--brain-path", type=str, default="vae-nsd-s1-vs1-bs24-350")
     parser.add_argument("--setting-name", type=str, default="single_s1_vs1")
@@ -379,8 +390,8 @@ def parse_args(input_args=None):
     parser.add_argument("--embed-dim", type=int, default=1664) #!记得改
 
     parser.add_argument("--prediction", type=str, default="x")
-    parser.add_argument("--model-name", type=str, default="try-fm-vae-s1-vs1-d8-h13-bs24-es350-x-mode")
-    parser.add_argument("--save-name", type=str, default="tryfm-vae-s1-vs1-d8-h13-bs24-es350-x-mode")
+    parser.add_argument("--model-name", type=str, default="fm-vae-s1-vs1-d8-h13-bs24-es350-x-mode")
+    parser.add_argument("--save-name", type=str, default="fm-vae-s1-vs1-d8-h13-bs24-es350-x-mode")
     parser.add_argument("--model-depth", type=int, default=8)
     parser.add_argument("--model-head", type=int, default=13)  #!记得改
     parser.add_argument("--save_imgs", action=argparse.BooleanOptionalAction, default=True)  #! change to False
@@ -389,7 +400,6 @@ def parse_args(input_args=None):
 
     # dataset
     parser.add_argument("--test-batch-size", type=int, default=100)
-    parser.add_argument("--data-path", type=str, default="/home/bingxing2/ailab/group/ai4neuro/BrainVL/data/processed_data")
 
     # # precision
     # parser.add_argument("--allow-tf32", action="store_true")
