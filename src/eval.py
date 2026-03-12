@@ -2,7 +2,9 @@ import argparse
 import logging
 import os
 import sys
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src")
+
+_SRC_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _SRC_DIR)
 
 import clip
 import h5py

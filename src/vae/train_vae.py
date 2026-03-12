@@ -1,8 +1,13 @@
 import copy
 import os
 import sys
-sys.path.append('/home/bingxing2/ailab/maiweijian/SynBrain/src')
-sys.path.append('/home/bingxing2/ailab/maiweijian/SynBrain/src/vae')
+
+# Add project paths relative to this file
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_SRC_DIR = os.path.dirname(_THIS_DIR)
+sys.path.insert(0, _SRC_DIR)
+sys.path.insert(0, _THIS_DIR)
+
 import torch
 import torch.nn as nn
 import argparse

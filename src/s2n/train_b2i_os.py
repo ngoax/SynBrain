@@ -2,11 +2,14 @@ from sklearn.decomposition import PCA
 # from umap._umap import UMAP
 import os
 import sys
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/vae")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/s2n")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/sdxl/")
-sys.path.append("/home/bingxing2/ailab/maiweijian/SynBrain/src/sdxl/generative_models")
+
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_SRC_DIR = os.path.dirname(_THIS_DIR)
+sys.path.insert(0, _SRC_DIR)
+sys.path.insert(0, os.path.join(_SRC_DIR, "vae"))
+sys.path.insert(0, _THIS_DIR)
+sys.path.insert(0, os.path.join(_SRC_DIR, "sdxl"))
+sys.path.insert(0, os.path.join(_SRC_DIR, "sdxl", "generative_models"))
 import argparse
 import copy
 from copy import deepcopy
