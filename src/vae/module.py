@@ -162,14 +162,16 @@ class AttnBlock(nn.Module):
         q = self.q(h_)
         k = self.k(h_)
         v = self.v(h_)
-        b, c, l = q.shape
 
-        q = q.permute(0, 2, 1)  # [b, l, c]
-        w_ = torch.bmm(q, k)  # [b, l, l]
-        w_ = w_ * (c ** -0.5)  
-        w_ = torch.nn.functional.softmax(w_, dim=2)  # softmax
+        # Use memory-efficient scaled_dot_product_attention (Flash Attention)
+        # Reshape from [b, c, l] to [b, 1, l, c] (1 head)
+        q = q.permute(0, 2, 1).unsqueeze(1)  # [b, 1, l, c]
+        k = k.permute(0, 2, 1).unsqueeze(1)  # [b, 1, l, c]
+        v = v.permute(0, 2, 1).unsqueeze(1)  # [b, 1, l, c]
 
-        h_ = torch.bmm(v, w_.permute(0, 2, 1))  # [b, c, l]
+        h_ = F.scaled_dot_product_attention(q, k, v)  # [b, 1, l, c]
+        h_ = h_.squeeze(1).permute(0, 2, 1)  # [b, c, l]
+
         h_ = self.proj_out(h_)
         return x + h_
 
