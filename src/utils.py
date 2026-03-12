@@ -12,12 +12,20 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 from PIL import Image
 import torchvision.transforms as transforms
-from mindeye2 import BrainNetwork, PriorNetwork, BrainDiffusionPrior
+try:
+    from mindeye2 import BrainNetwork, PriorNetwork, BrainDiffusionPrior
+except ImportError:
+    BrainNetwork = PriorNetwork = BrainDiffusionPrior = None
 import torch.nn as nn
 import torch.nn.functional as F
 
     
-device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda:0')
+elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+    device = torch.device('mps')
+else:
+    device = torch.device('cpu')
 
 from torchdiffeq import odeint_adjoint as odeint
 import matplotlib.pyplot as plt 
