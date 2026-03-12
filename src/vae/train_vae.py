@@ -109,6 +109,10 @@ def main(args):
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.base_lr, weight_decay=0.05)  # Include brain encoder params
 
+    # Mixed precision for memory efficiency
+    use_amp = (device == 'cuda')
+    scaler = torch.amp.GradScaler('cuda', enabled=use_amp)
+
     init_step = 0
     if args.resume and os.path.exists(os.path.join(outdir, 'last.pth')):
         checkpoint_file = os.path.join(outdir, 'last.pth')
@@ -157,12 +161,14 @@ def main(args):
             fmri = fmri.unsqueeze(1).float().to(device)
             z = z.float().to(device)
             
-            zs, recon, rec_loss, kl_loss, clip_loss, loss = model(fmri, z, sample_posterior=True)
+            with torch.amp.autocast('cuda', enabled=use_amp):
+                zs, recon, rec_loss, kl_loss, clip_loss, loss = model(fmri, z, sample_posterior=True)
             
             loss = loss.mean()
             check_loss(loss)
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             losses.append(loss.item())
             rec_losses.append(rec_loss.mean().item())
@@ -188,7 +194,7 @@ def main(args):
             
         model.eval()
         for val_i, (val_fmri, val_z, val_sub) in enumerate(val_dataloader):
-            with torch.no_grad():
+            with torch.no_grad(), torch.amp.autocast('cuda', enabled=use_amp):
                 val_fmri = val_fmri.unsqueeze(1).float().to(device)
                 val_z = val_z.float().to(device)
                 
