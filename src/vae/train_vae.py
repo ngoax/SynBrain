@@ -70,14 +70,24 @@ def main(args):
     args.local_batch_size = args.batch_size
     train_dataloader, val_dataloader = multisub_clip_dataset(args)
    
-    device = 'cuda'
-    os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
-    device_id = [0, 1]
+    if torch.cuda.is_available():
+        device = 'cuda'
+        n_gpus = torch.cuda.device_count()
+        device_ids = list(range(n_gpus))
+    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+        device = 'mps'
+        n_gpus = 0
+        device_ids = []
+    else:
+        device = 'cpu'
+        n_gpus = 0
+        device_ids = []
+    print(f"Using device: {device}, GPUs: {n_gpus}")
     
     model = BrainVAE(ddconfig=ddconfig,
                         clip_weight=args.clip_weight,
                         kl_weight=args.kl_weight,
-                        hidden_dim=1024,
+                        hidden_dim=4096,
                         linear_dim=2048,
                         embed_dim=1664
                         )
@@ -86,7 +96,8 @@ def main(args):
     count_params(model)
     
     model.to(device)
-    model = torch.nn.DataParallel(model, device_ids=device_id)
+    if n_gpus > 1:
+        model = torch.nn.DataParallel(model, device_ids=device_ids)
     
     if args.wandb_log:
         if args.resume:
