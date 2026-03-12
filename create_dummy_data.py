@@ -37,10 +37,10 @@ def main():
 
     rng = np.random.default_rng(42)
 
-    # --- Training fMRI: shape [num_train, 3, num_voxels] ---
+    # --- Training fMRI: shape [num_train, num_voxels] ---
     # Values scaled like real data (divided by 2000), typical range ~ [-0.5, 0.5]
-    print(f"Creating train fMRI: ({num_train}, 3, {args.num_voxels})")
-    train_fmri = rng.normal(0, 0.15, (num_train, 3, args.num_voxels)).astype(np.float32)
+    print(f"Creating train fMRI: ({num_train}, {args.num_voxels})")
+    train_fmri = rng.normal(0, 0.15, (num_train, args.num_voxels)).astype(np.float32)
     np.save(os.path.join(subj_dir, "nsd_train_fmri_all_scale_sub1.npy"), train_fmri)
     print(f"  Saved. Size: {train_fmri.nbytes / 1e6:.1f} MB")
     del train_fmri

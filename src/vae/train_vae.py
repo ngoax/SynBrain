@@ -147,7 +147,8 @@ def main(args):
         test_fwd_percent_correct = 0.
         test_bwd_percent_correct = 0.
         
-        torch.cuda.empty_cache()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
         
         model.train()
         for train_i, (fmri, z, sub_id) in enumerate(train_dataloader):
@@ -290,8 +291,8 @@ if __name__ == "__main__":
     parser.add_argument("--ckpt_interval", type=int, default=1)
     parser.add_argument("--base_lr", type=float, default=1e-4)
     parser.add_argument("--linear_dim", type=int, default=2048)
-    parser.add_argument("--wandb_log", type=bool, default=False)
-    parser.add_argument("--plot_recon", type=bool, default=True)
+    parser.add_argument("--wandb_log", action="store_true", default=False)
+    parser.add_argument("--plot_recon", action="store_true", default=False)
 
     args = parser.parse_args()
     main(args)
