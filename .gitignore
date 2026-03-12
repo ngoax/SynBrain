@@ -1,0 +1,27 @@
+# Model checkpoints
+checkpoint/
+checkpoints/
+*.pth
+*.pt
+*.ckpt
+
+# Large numpy data files
+dummy_data/
+*.npy
+*.npz
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.env
+.venv
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Output / logs
+output/
