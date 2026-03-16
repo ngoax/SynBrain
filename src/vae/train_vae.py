@@ -29,6 +29,23 @@ from dataset import *
 from mind_utils import *
 from brainvae import BrainVAE
 
+
+def _normalize_state_dict_for_model(ckpt_state, model):
+    """Align checkpoint key prefixes (e.g., DataParallel 'module.') with model keys."""
+    model_keys = list(model.state_dict().keys())
+    ckpt_keys = list(ckpt_state.keys())
+    if not model_keys or not ckpt_keys:
+        return ckpt_state
+
+    model_has_module = model_keys[0].startswith("module.")
+    ckpt_has_module = ckpt_keys[0].startswith("module.")
+
+    if ckpt_has_module and not model_has_module:
+        return {k[len("module."):]: v for k, v in ckpt_state.items()}
+    if model_has_module and not ckpt_has_module:
+        return {f"module.{k}": v for k, v in ckpt_state.items()}
+    return ckpt_state
+
 def requires_grad(model, flag=True):
     """
     Set requires_grad flag for all parameters in a model.
@@ -117,7 +134,8 @@ def main(args):
     if args.resume and os.path.exists(os.path.join(outdir, 'last.pth')):
         checkpoint_file = os.path.join(outdir, 'last.pth')
         checkpoint = torch.load(checkpoint_file, map_location=device)
-        model.load_state_dict(checkpoint["model"])
+        ckpt_model_state = _normalize_state_dict_for_model(checkpoint["model"], model)
+        model.load_state_dict(ckpt_model_state)
         optimizer.load_state_dict(checkpoint["optimizer"])
         # scheduler.load_state_dict(checkpoint["scheduler"])
         init_step = checkpoint["epoch"]+1
@@ -251,9 +269,10 @@ def main(args):
             print(f'Saving Backup last checkpoint at {epoch} epoch out of {args.num_epochs} epochs...')
             ckpt_path = outdir + f'/last.pth'
             print(f'saving last at {epoch}', flush=True)
+            model_to_save = model.module if isinstance(model, nn.DataParallel) else model
             torch.save({
                 'epoch': epoch,
-                'model': model.state_dict(),
+                'model': model_to_save.state_dict(),
                 'optimizer': optimizer.state_dict(),
                 # 'scheduler': scheduler.state_dict(),
                 'train_losses': losses,
